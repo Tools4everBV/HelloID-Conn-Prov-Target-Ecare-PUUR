@@ -1,0 +1,43 @@
+[
+  {
+    "key": "ClientId",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "ClientId",
+      "description": "The ClientId to connect to the API",
+      "required": true
+    }
+  },
+  {
+    "key": "ClientSecret",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "type": "password",
+      "label": "ClientSecret",
+      "description": "The ClientSecret to connect to the API",
+      "required": true
+    }
+  },
+  {
+    "key": "TokenUrl",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "TokenUrl",
+      "description": "The TokenUrl to authorize with the API. e.g. https://idp-a.ecare.nu/identity ",
+      "required": true
+    }
+  },
+  {
+    "key": "BaseUrl",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "BaseUrl",
+      "description": "The URL to the API. e.g. https://service-scim-a.ecare.nu",
+      "required": true
+    }
+  }
+]
