@@ -137,25 +137,25 @@ try {
     }
 
     Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
-    $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
+    $accessToken = Get-GenericScimOAuthToken -ClientID $actionContext.Configuration.ClientId -ClientSecret $actionContext.Configuration.ClientSecret -TokenUrl $actionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
 
-    $splatParams = @{
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users?filter=username eq $($ActionContext.References.Account)"
-        Method  = 'Get'
-        Headers = $headers
+    try {
+        $splatParams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
+            Method  = 'GET'
+            Headers = $headers
+        }
+        $correlatedAccount = Invoke-EcareRestMethod @splatParams
+    } catch {
+        if ($_.Exception.Response.StatusCode -eq 404){
+            $action = 'NotFound'
+        } else {
+            throw $_
+        }
     }
-    $webResponse = Invoke-EcareRestMethod @splatParams
-
-    if ($webResponse.Resources.count -eq 1) {
-        $correlatedAccount = $webResponse.Resources | Select-Object -First 1
-    } elseif ($webResponse.Resources.count -gt 1) {
-        throw "Multiple accounts are found for [$($ActionContext.References.Account)]"
-    }
-
-
 
     if ($null -ne $correlatedAccount) {
         $action = 'DeleteAccount'
@@ -176,7 +176,7 @@ try {
             'DeleteAccount' {
                 Write-Information "Deleting Ecare account with accountReference: [$($actionContext.References.Account)]"
                 $splatDelete = @{
-                    Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($correlatedAccount.id)"
+                    Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
                     Method  = 'DELETE'
                     Headers = $headers
                 }
