@@ -181,26 +181,22 @@ try {
         Authorization = "Bearer $accessToken"
     }
 
-    $splatParams = @{
-        Method  = 'Get'
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users?filter=username eq $($ActionContext.References.Account)"
-        headers = $headers
-    }
-
-    $correlatedAccount = $null
-
-
-    $webResponse = Invoke-EcareRestMethod @splatParams
-    if($null -ne $webResponse.Resources)
-    {
-        if ($webResponse.Resources.count -eq 1)
-        {
-            $ScimAccount =$webResponse.Resources[0]
-            $correlatedAccount = $ScimAccount | ConvertTo-AccountObject -AccountModel $actionContext.data
+    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
+    try {
+        $splatParams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
+            Method  = 'GET'
+            Headers = $headers
+        }
+        $correlatedAccount = Invoke-EcareRestMethod @splatParams
+        $outputContext.PreviousData = $correlatedAccount
+    } catch {
+        if ($_.Exception.Response.StatusCode -eq 404){
+            $action = 'NotFound'
+        } else {
+            throw $_
         }
     }
-
-    $outputContext.PreviousData = $correlatedAccount
 
     if ($null -ne $correlatedAccount) {
         $action = 'EnableAccount'
@@ -239,13 +235,12 @@ try {
                 }
 
                 $splatParams = @{
-                    Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users/$($ScimAccount.id)"
+                    Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
                     Body    = $body | ConvertTo-Json
-                    Method  = 'Patch'
+                    Method  = 'PATCH'
                     Headers     = $headers
                 }
-                $UpdateResult = Invoke-EcareRestMethod @splatParams
-
+                $null = Invoke-EcareRestMethod @splatParams
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
