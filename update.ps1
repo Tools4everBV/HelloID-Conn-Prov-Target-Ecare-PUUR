@@ -214,27 +214,26 @@ try {
 
     $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
 
-    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
-
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
 
-    $splatParams = @{
-        Method  = 'Get'
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users?filter=username eq $($ActionContext.References.Account)"
-        Headers = $headers
-    }
-
-    $webResponse = Invoke-EcareRestMethod @splatParams
-    if ($null -ne $webResponse.Resources) {
-        if ($webResponse.Resources.count -eq 1) {
-            $ScimAccount = $webResponse.Resources[0]
-            $correlatedAccount = $ScimAccount | ConvertTo-AccountObject -AccountModel $actionContext.data
+    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
+    try {
+        $splatParams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
+            Method  = 'GET'
+            Headers = $headers
+        }
+        $correlatedAccount = Invoke-EcareRestMethod @splatParams
+        $outputContext.PreviousData = $correlatedAccount
+    } catch {
+        if ($_.Exception.Response.StatusCode -eq 404){
+            $action = 'NotFound'
+        } else {
+            throw $_
         }
     }
-
-    $outputContext.PreviousData = $correlatedAccount
 
     # Always compare the account against the current account in target system
     if ($null -ne $correlatedAccount) {
@@ -271,7 +270,7 @@ try {
                 $body = $ecareUpdateAccount | ConvertTo-ScimUpdateObject
 
                 $splatParams = @{
-                    Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users/$($ScimAccount.id)"
+                    Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
                     Body    = $body | ConvertTo-Json
                     Method  = 'Patch'
                     Headers = $headers
