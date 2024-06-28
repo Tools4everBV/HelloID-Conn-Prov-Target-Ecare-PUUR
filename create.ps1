@@ -134,7 +134,7 @@ try {
     # Initial Assignments
     $outputContext.AccountReference = 'Currently not available'
 
-    $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
+    $accessToken = Get-GenericScimOAuthToken -ClientID $actionContext.Configuration.ClientId -ClientSecret $actionContext.Configuration.ClientSecret -TokenUrl $actionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
@@ -152,9 +152,8 @@ try {
         }
 
         # Verify if a user must be either [created ] or just [correlated]
-
         $splatParams = @{
-            Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users?filter=username eq $($correlationValue)"
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users?filter=urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.employeeNumber eq $correlationValue"
             Method  = 'Get'
             Headers = $headers
         }
@@ -163,7 +162,7 @@ try {
         if ($webResponse.Resources.count -eq 1) {
             $correlatedAccount = $webResponse.Resources | Select-Object -First 1
         } elseif ($webResponse.Resources.count -gt 1) {
-            throw "Multiple accounts are found for [$($ActionContext.References.Account)]"
+            throw "Multiple accounts are found for [$($actionContext.References.Account)]"
         }
     }
 
@@ -246,7 +245,7 @@ try {
                 }
 
                 $outputContext.Data = $createdAccount
-                $outputContext.AccountReference = $createdAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber
+                $outputContext.AccountReference = $createdAccount.id
                 $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
                 break
             }
@@ -254,9 +253,9 @@ try {
             'CorrelateAccount' {
                 Write-Information 'Correlating Ecare account'
                 $outputContext.Data = $correlatedAccount
-                $outputContext.AccountReference = $correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber
+                $outputContext.AccountReference = $correlatedAccount.id
                 $outputContext.AccountCorrelated = $true
-                $auditLogMessage = "Correlated account: [$($correlatedAccount.ExternalId)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+                $auditLogMessage = "Correlated account: [$($correlatedAccount.id)] on field: [$($correlationField)] with value: [$($correlationValue)]"
                 break
             }
         }
