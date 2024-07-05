@@ -106,7 +106,7 @@ The following settings are required to connect to the API.
 
 #### Employee account required
 
-Note that an employee account is required before a user account can be created. If the employee doesn't exist, a __500 internal server error__ will be returned. The employee account is not managed by _HelloID_.
+Note that an employee account is required before a user account can be created. If the employee doesn't exist, a __500 internal server error__ will be returned. The employee account is not managed by _HelloID_. Employee accounts are created by an external synchronization.
 
 #### Concurrent actions
 
@@ -114,11 +114,11 @@ Make sure you set the number of concurrent actions (configuration tab) on 1. The
 
 #### Additional mapping
 
-For some user properties as defined in the Field mapping, there is some additional mapping required and performed in the POwerShell scripts itself to create the actual the SCIM message.
+For some user properties as defined in the Field mapping, there is some additional mapping required and performed in the PowerShell scripts itself to create the actual the SCIM message.
 
 #### Correlation by `externalId`
 
-At the moment the default correlation is done by means of the `externalId`. The `externalId` is also used as the account reference used by HelloId. Note that there is however at the moment not an explicit query available in the API on the `externalId`. A query on the username is used instead and the API implicitly recognizes when the `externalId` is specified in this query.
+At the moment, correlation is done by means of the `externalId`. The `id` that will be returned if an account is retrieved or created will be used as the account reference by HelloId.
 
 #### Limited error handling
 
