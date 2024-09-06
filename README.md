@@ -147,10 +147,6 @@ During testing, we encountered situations where the email address and username p
 
 The fields: `userName`, `WorkEmail`, `employeeNumber` and `ExternalId` are required to be unique.
 
-#### `employeeNumber` and `id` can be the same.
-
-We have identified a potential issue where the `employeeNumber` and `id` can be the same, which might lead to conflicts. Specifically, a 'GET' to:`scim\Users\{id}` could result in returning a different account than intended. Situations like this are however unlikely to occur since the `employeeNumber` always is a unique number.
-
 ## Setup the connector
 
 > _How to setup the connector in HelloID._ Are special settings required. Like the _primary manager_ settings for a source connector.
