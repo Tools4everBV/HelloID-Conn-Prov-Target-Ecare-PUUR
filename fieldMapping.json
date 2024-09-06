@@ -22,7 +22,7 @@
             "Disable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@vivium.nl\\\"\\r\\n}\\r\\ngetValue();\"",
+          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@domain.com\\\"\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
@@ -49,7 +49,7 @@
             "Disable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@vivium.nl\\\"\\r\\n}\\r\\ngetValue();\"",
+          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@domain.com\\\"\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
@@ -76,7 +76,7 @@
             "Disable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@vivium.nl\\\"\\r\\n}\\r\\ngetValue();\"",
+          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@domain.com\\\"\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
