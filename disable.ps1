@@ -167,6 +167,44 @@ function Resolve-EcareError {
     }
 }
 
+function ConvertTo-ScimUpdateObject {
+    [CmdletBinding()]
+    param (
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $True,
+            Position = 0)]
+        $EcareAccount
+    )
+
+    [System.Collections.Generic.List[object]]$operations = @()
+    foreach ($property in $EcareAccount.PSObject.Properties) {
+        if ($property.Name -eq "WorkEmail") {
+            $operations.Add(
+                [PSCustomObject]@{
+                    op    = "Replace"
+                    path  = "emails"
+                    value = $property.Value
+                }
+            )
+        } else {
+            $operations.Add(
+                [PSCustomObject]@{
+                    op    = "Replace"
+                    path  = $property.Name
+                    value = $property.Value
+                }
+            )
+        }
+    }
+    $body = [ordered]@{
+        schemas    = @(
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+        )
+        Operations = $operations
+    }
+    write-output $body
+}
 #endregion
 
 try {
@@ -198,8 +236,20 @@ try {
     }
 
     if ($null -ne $correlatedAccount) {
-        $action = 'DisableAccount'
-        $dryRunMessage = "Disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+		$splatCompareProperties = @{
+            ReferenceObject  = @($correlatedAccount.PSObject.Properties)
+            DifferenceObject = @(([PSCustomObject]$actionContext.Data).PSObject.Properties)
+        }
+        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
+        if ($propertiesChanged) {
+			$action = 'UpdateDisableAccount'
+			$dryRunMessage = "Update and disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+		}
+		else
+		{
+			$action = 'DisableAccount'
+			$dryRunMessage = "Disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+		}
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -246,6 +296,36 @@ try {
                     Message = 'Disable account was successful'
                     IsError = $false
                 })
+                break
+            }
+			
+			'UpdateDisableAccount' {
+                Write-Information "Updating and disabling Ecare account with accountReference: [$($actionContext.References.Account)]"
+
+                # Make sure to test with special characters and if needed; add utf8 encoding.
+                $ecareUpdateAccount = $actionContext.Data | Select-Object -Property $propertiesChanged.Name
+                $body = $ecareUpdateAccount | ConvertTo-ScimUpdateObject
+
+                Write-Warning ($body | ConvertTo-Json)
+
+                $splatParams = @{
+                    Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
+                    Body    = $body | ConvertTo-Json
+                    Method  = 'Patch'
+                    Headers = $headers
+                }
+
+                Write-Warning "$($splatParams.Uri)"
+
+                $UpdateResult = Invoke-EcareRestMethod @splatParams
+
+
+                $outputContext.data = $actionContext.Data
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = "Update and disable account was successful, Account property(s) updated: [$($propertiesChanged.name -join ',')]"
+                        IsError = $false
+                    })
                 break
             }
 

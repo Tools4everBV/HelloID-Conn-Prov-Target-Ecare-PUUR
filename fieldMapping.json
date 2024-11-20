@@ -2,23 +2,6 @@
   "Version": "v1",
   "MappingFields": [
     {
-      "Name": "employeeNumber",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create",
-            "Update"
-          ],
-          "MappingMode": "Field",
-          "Value": "\"Person.ExternalId\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
       "Name": "ExternalId",
       "Description": "",
       "Type": "Text",
@@ -26,10 +9,20 @@
         {
           "MapForActions": [
             "Create",
-            "Update"
+            "Update",
+            "Enable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\r\\n    return Person.Accounts.MicrosoftActiveDirectory.userPrincipalName\\r\\n}\\r\\ngetValue();\"",
+          "Value": "\"function getValue() {\\r\\n    return Person.Accounts._fa8936cb51934981bbc690aba9eef841.userPrincipalName\\r\\n}\\r\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
+        },
+        {
+          "MapForActions": [
+            "Disable"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@domain.com\\\"\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
@@ -43,10 +36,20 @@
         {
           "MapForActions": [
             "Create",
-            "Update"
+            "Update",
+            "Enable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\n    return Person.Accounts.MicrosoftActiveDirectory.userPrincipalName\\n}\\ngetValue();\"",
+          "Value": "\"function getValue() {\\n    return Person.Accounts._fa8936cb51934981bbc690aba9eef841.userPrincipalName\\n}\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
+        },
+        {
+          "MapForActions": [
+            "Disable"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@domain.com\\\"\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
@@ -60,10 +63,20 @@
         {
           "MapForActions": [
             "Create",
-            "Update"
+            "Update",
+            "Enable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\r\\n    return Person.Accounts.MicrosoftActiveDirectory.mail\\r\\n}\\r\\ngetValue();\"",
+          "Value": "\"function getValue() {\\r\\n    return Person.Accounts._fa8936cb51934981bbc690aba9eef841.mail\\r\\n}\\r\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
+        },
+        {
+          "MapForActions": [
+            "Disable"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\r\\n    return Person.ExternalId + \\\"@domain.com\\\"\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
@@ -76,10 +89,36 @@
       "MappingActions": [
         {
           "MapForActions": [
-            "Create"
+            "Create",
+            "Disable"
           ],
           "MappingMode": "Fixed",
           "Value": "\"False\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        },
+        {
+          "MapForActions": [
+            "Enable"
+          ],
+          "MappingMode": "Fixed",
+          "Value": "\"True\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "employeeNumber",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.ExternalId\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }

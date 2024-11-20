@@ -144,17 +144,13 @@ try {
     }
 
     $splatParams = @{
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users?filter=username eq $($ActionContext.References.Account)"
+        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users/$($ActionContext.References.Account)"
         Method  = 'Get'
         Headers = $headers
     }
-    $webResponse = Invoke-EcareRestMethod @splatParams
-
-    if ($webResponse.Resources.count -eq 1) {
-        $correlatedAccount = $webResponse.Resources | Select-Object -First 1
-    } elseif ($webResponse.Resources.count -gt 1) {
-        throw "Multiple accounts are found for [$($ActionContext.References.Account)]"
-    }
+    $correlatedAccount = Invoke-EcareRestMethod @splatParams
+    
+    $correlatedAccount = $webResponse
 
     if ($null -ne $correlatedAccount) {
         $action = 'RevokePermission'
