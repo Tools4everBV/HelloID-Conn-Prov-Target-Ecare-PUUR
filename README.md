@@ -1,5 +1,5 @@
 
-# HelloID-Conn-Prov-Target-Ecare
+# HelloID-Conn-Prov-Target-Ecare-PUUR
 
 > [!IMPORTANT]
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
@@ -10,7 +10,7 @@
 
 ## Table of contents
 
-- [HelloID-Conn-Prov-Target-Ecare](#helloid-conn-prov-target-ecare)
+- [HelloID-Conn-Prov-Target-Ecare-PUUR](#helloid-conn-prov-target-ecare-puur)
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Getting started](#getting-started)
@@ -35,7 +35,7 @@
 
 ## Introduction
 
-_HelloID-Conn-Prov-Target-Ecare_ is a _target_ connector. _Ecare_ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
+_HelloID-Conn-Prov-Target-Ecare-PUUR_ is a _target_ connector. _Ecare PUUR_ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
 
 | Endpoint       | Description                      |
 | -------------- | -------------------------------- |
@@ -73,7 +73,7 @@ See the description of each field in this file (or in the HelloID Fields tab aft
 
 #### Correlation configuration
 
-The correlation configuration is used to specify which properties will be used to match an existing account within _Ecare_ to a person in _HelloID_.
+The correlation configuration is used to specify which properties will be used to match an existing account within _Ecare PUUR_ to a person in _HelloID_.
 
 To properly setup the correlation:
 1. Make sure the Field mapping is configured first.
