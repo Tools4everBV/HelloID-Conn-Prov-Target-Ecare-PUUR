@@ -1,11 +1,10 @@
-################################################################
-# HelloID-Conn-Prov-Target-Ecare-GrantPermission-Teams
+############################################################
+# HelloID-Conn-Prov-Target-Ecare-Permissions-Teams
 # PowerShell V2
-################################################################
+############################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
 #region functions
 function Get-GenericScimOAuthToken {
 
@@ -73,6 +72,7 @@ function Invoke-EcareRestMethod {
         [System.Collections.IDictionary]
         $Headers = @{}
     )
+
     process {
         try {
             $splatParams = @{
@@ -91,7 +91,6 @@ function Invoke-EcareRestMethod {
         }
     }
 }
-
 function Resolve-EcareError {
     [CmdletBinding()]
     param (
@@ -129,105 +128,39 @@ function Resolve-EcareError {
 }
 #endregion
 
-# Begin
 try {
-    # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
-        throw 'The account reference could not be found'
-    }
+    Write-Information 'Retrieving permissions'
 
-    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
-    $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
+    $accessToken = Get-GenericScimOAuthToken -ClientID $actionContext.Configuration.ClientId -ClientSecret $actionContext.Configuration.ClientSecret -TokenUrl $actionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
-    
+
+    # Get all groups
     $splatParams = @{
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users/$($ActionContext.References.Account)"
+        Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Groups"
         Method  = 'Get'
         Headers = $headers
     }
-    $correlatedAccount = Invoke-EcareRestMethod @splatParams
-    
-    if ($null -ne $correlatedAccount) {
-        $action = 'GrantPermission'
-        $dryRunMessage = "Grant Ecare team permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
-    } else {
-        $action = 'NotFound'
-        $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
-    }
-
-    # Add a message and the result of each of the validations showing what will happen during enforcement
-    if ($actionContext.DryRun -eq $true) {
-        Write-Information "[DryRun] $dryRunMessage"
-    }
-
-    # Process
-    if (-not($actionContext.DryRun -eq $true)) {
-        switch ($action) {
-            'GrantPermission' {
-                Write-Information "Granting Ecare team permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
-
-                # Make sure to test with special characters and if needed; add utf8 encoding.
-                $bodyTeams = @{
-                    Schemas    = @(
-                        'urn:ietf:params:scim:api:messages:2.0:PatchOp'
-                    )
-                    Operations = @(
-                        @{
-                            name  = 'addMember'
-                            op    = 'add'
-                            path  = 'members'
-                            value = @(@{
-                                type = 'User'
-                                value = $($personContext.Person.ExternalId)
-                            })
-                    }
-                    )
+    $webResponse = Invoke-EcareRestMethod @splatParams
+    foreach ($permission in $webResponse.Resources) {
+        $outputContext.Permissions.Add(
+            @{
+                DisplayName    = $permission.displayName
+                Identification = @{
+                    Reference   = $permission.id
+                    DisplayName = $permission.displayName
                 }
-                
-                $splatTeams = @{
-                    #This will be added: Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.Reference)"
-                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.DisplayName)"
-                    Method      = 'Patch'
-                    Headers     = $headers
-                    Body        = ($bodyTeams | ConvertTo-Json -Depth 4)
-                    ContentType = 'application/json'
-                }
-
-                $null = Invoke-EcareRestMethod @splatTeams
-
-                $outputContext.Success = $true
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Grant team permission [$($actionContext.References.Permission.DisplayName)] was successful"
-                        IsError = $false
-                    })
             }
-
-            'NotFound' {
-                $outputContext.Success = $false
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
-                        IsError = $true
-                    })
-                break
-            }
-        }
+        )
     }
 } catch {
-    $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-EcareError -ErrorObject $ex
-        $auditMessage = "Could not grant Ecare team permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not grant Ecare team permission. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
-            IsError = $true
-        })
 }

@@ -1,5 +1,5 @@
 ################################################################
-# HelloID-Conn-Prov-Target-Ecare-RevokePermission-Teams
+# HelloID-Conn-Prov-Target-Ecare-GrantPermission-Teams
 # PowerShell V2
 ################################################################
 
@@ -141,17 +141,26 @@ try {
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
-    
-    $splatParams = @{
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users/$($ActionContext.References.Account)"
-        Method  = 'Get'
-        Headers = $headers
+
+    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
+    try {
+        $splatParams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
+            Method  = 'GET'
+            Headers = $headers
+        }
+        $correlatedAccount = Invoke-EcareRestMethod @splatParams
+    } catch {
+        if ($_.Exception.Response.StatusCode -eq 404) {
+            $action = 'NotFound'
+        } else {
+            throw $_
+        }
     }
-    $correlatedAccount = Invoke-EcareRestMethod @splatParams
-    
+
     if ($null -ne $correlatedAccount) {
-        $action = 'RevokePermission'
-        $dryRunMessage = "Revoke Ecare team permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $action = 'GrantPermission'
+        $dryRunMessage = "Grant Ecare team permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -165,8 +174,8 @@ try {
     # Process
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'RevokePermission' {
-                Write-Information "Revoking Ecare team permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+            'GrantPermission' {
+                Write-Information "Granting Ecare team permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
 
                 # Make sure to test with special characters and if needed; add utf8 encoding.
                 $bodyTeams = @{
@@ -176,18 +185,16 @@ try {
                     Operations = @(
                         @{
                             name  = 'addMember'
-                            op    = 'remove'
+                            op    = 'add'
                             path  = 'members'
                             value = @(@{
-                                type = 'User'
-                                value = $($personContext.Person.ExternalId) #"$($correlatedAccount.id)"
-                            })
-                    }
+                                    type  = 'User'
+                                    value = "$($correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber)"
+                                })
+                        }
                     )
                 }
-                
                 $splatTeams = @{
-                    #This will be added: Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.Reference)"
                     Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.DisplayName)"
                     Method      = 'Patch'
                     Headers     = $headers
@@ -195,11 +202,14 @@ try {
                     ContentType = 'application/json'
                 }
 
-                $null = Invoke-EcareRestMethod @splatTeams
+                $result = Invoke-EcareRestMethod @splatTeams
+                if ($result.results.status -contains 400) {
+                    throw ($result.results.message -join ', ')
+                }
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke team permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Grant team permission [$($actionContext.References.Permission.DisplayName)] was successful"
                         IsError = $false
                     })
             }
@@ -220,10 +230,10 @@ try {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-EcareError -ErrorObject $ex
-        $auditMessage = "Could not revoke Ecare team permission. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not grant Ecare team permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not revoke Ecare team permission. Error: $($_.Exception.Message)"
+        $auditMessage = "Could not grant Ecare team permission. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
