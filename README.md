@@ -29,7 +29,6 @@
       - [Static permissions](#static-permissions)
       - [Email address and userName have some requirements that are unknown.](#email-address-and-username-have-some-requirements-that-are-unknown)
       - [Unique fields](#unique-fields)
-      - [`employeeNumber` and `id` can be the same.](#employeenumber-and-id-can-be-the-same)
   - [Setup the connector](#setup-the-connector)
   - [HelloID docs](#helloid-docs)
 
@@ -49,18 +48,21 @@ The API specification can be found on: https://service-scim-o.ecare.nu/swagger
 
 The following lifecycle actions are available:
 
-| Action                           | Description                                                         |
-| -------------------------------- | ------------------------------------------------------------------- |
-| create.ps1                       | PowerShell _create_ lifecycle action                                |
-| delete.ps1                       | PowerShell _delete_ lifecycle action                                |
-| disable.ps1                      | PowerShell _disable_ lifecycle action                               |
-| enable.ps1                       | PowerShell _enable_ lifecycle action                                |
-| update.ps1                       | PowerShell _update_ lifecycle action                                |
-| permissions/grantPermission.ps1  | PowerShell _grant_ lifecycle action. Grants a role to the user      |
-| permissions/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a role from the user |
-| permissions/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available roles |
-| configuration.json               | Default _configuration.json_                                        |
-| fieldMapping.json                | Default _fieldMapping.json_                                         |
+| Action                                 | Description                                                         |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| create.ps1                             | PowerShell _create_ lifecycle action                                |
+| delete.ps1                             | PowerShell _delete_ lifecycle action                                |
+| disable.ps1                            | PowerShell _disable_ lifecycle action                               |
+| enable.ps1                             | PowerShell _enable_ lifecycle action                                |
+| update.ps1                             | PowerShell _update_ lifecycle action                                |
+| permissions/roles/grantPermission.ps1  | PowerShell _grant_ lifecycle action. Grants a role to the user      |
+| permissions/roles/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a role from the user |
+| permissions/roles/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available roles |
+| permissions/teams/grantPermission.ps1  | PowerShell _grant_ lifecycle action. Grants a team to the user      |
+| permissions/teams/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a team from the user |
+| permissions/teams/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available teams |
+| configuration.json                     | Default _configuration.json_                                        |
+| fieldMapping.json                      | Default _fieldMapping.json_                                         |
 
 ## Getting started
 
