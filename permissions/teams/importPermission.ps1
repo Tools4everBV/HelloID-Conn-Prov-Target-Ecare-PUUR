@@ -133,7 +133,7 @@ function Resolve-EcareError {
 }
 #endregion
 try {
-    Write-Information 'Starting eCare PUUR permission teams entitlement import'
+    Write-Information 'Starting eCare PUUR permission roles entitlement import'
 
     # Set authentication headers
     $accessToken = Get-GenericScimOAuthToken -ClientID $actionContext.Configuration.ClientId -ClientSecret $actionContext.Configuration.ClientSecret -TokenUrl $actionContext.Configuration.tokenUrl
@@ -141,80 +141,82 @@ try {
         Authorization = "Bearer $accessToken"
     }
 
-    $staticRoles = @(
-        'Accountbeheer',
-        'Administratie-client',
-        'Administratie-medewerker',
-        'Clienten',
-        'Coach',
-        'Coordinator',
-        'Declareren',
-        'Documentbeheer',
-        'Medewerker',
-        'Pleinauteur',
-        'Roosteraar',
-        'Superuser'
-    )
+    $startIndex = 1   
+    $count = 25  
+    $receivedTeams = 0
 
-    Write-Information 'Starting getting account memberships of each permission'
-    
-    foreach ($role in $staticRoles) {
-        # Encode role in case it has spaces or special characters
-        $role = $role.ToLower()
-        $encodedRole = [System.Web.HttpUtility]::UrlEncode($role)
-        $groupMembers = @()
-
-        $take = 1000
-        $skip = 1 # SCIM uses 1-based index
-        $moreRecords = $true
-
-        while ($moreRecords) {
-            $splatGetGroupMembers = @{
-                Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users?filter=roles%20eq%20%22$encodedRole%22&startIndex=$skip&count=$take"
-                Method  = 'GET'
-                Headers = $headers
-            }
-
-            $GetResponse = Invoke-RestMethod @splatGetGroupMembers
-
-            foreach ($user in $GetResponse.Resources) {
-                $groupMembers += $user.id
-            }
-
-            if ($GetResponse.totalResults -lt ($skip + $take - 1)) {
-                $moreRecords = $false
-            }
-            else {
-                $skip += $take
-            }
+    do {
+        $splatParamsGetTeams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Groups?startIndex=$startIndex&count=$count"
+            Method  = 'GET'
+            Headers = $headers
         }
 
-        if ($groupMembers.Count -gt 0) {
-            Write-Output @(
-                @{
-                    AccountReferences   = $groupMembers
-                    PermissionReference = @{
-                        Id = $role
-                    }
-                    Description         = "Rol - $role"
-                    DisplayName         = $role
+        $GetTeamsResponse = Invoke-EcareRestMethod @splatParamsGetTeams
+
+        foreach ($team in $GetTeamsResponse.Resources) {
+
+            # --- Existing member retrieval per team (paged SCIM Users) ---
+            $groupMembers = @()
+
+            $take = 100
+            $skip = 1 # SCIM uses 1-based index
+            $moreRecords = $true
+
+            while ($moreRecords) {
+                $splatGetMembers = @{
+                    Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users?filter=groups%20eq%20%22$($team.id)%22&startIndex=$skip&count=$take"
+                    Method  = 'GET'
+                    Headers = $headers
                 }
-            )
+
+                $GetResponse = Invoke-EcareRestMethod @splatGetMembers
+
+                foreach ($user in $GetResponse.Resources) {
+                    $groupMembers += $user.id
+                }
+
+                if ($GetResponse.totalResults -lt ($skip + $take - 1)) {
+                    $moreRecords = $false
+                }
+                else {
+                    $skip += $take
+                }
+            }
+
+            if ($groupMembers.Count -gt 0) {
+                Write-Output @(
+                    @{
+                        AccountReferences   = $groupMembers
+                        PermissionReference = @{
+                            Reference = $team.id
+                        }
+                        Description         = "Team - $($team.displayName)"
+                        DisplayName         = $team.displayName
+                    }
+                )
+            }
         }
-    }
+
+        $receivedTeams = @($GetTeamsResponse.Resources).Count
+        $startIndexTeams += $receivedTeams
+
+    } while ($receivedTeams -eq $countTeams)
+
+
     
-    Write-Information 'eCare PUUR permission teams entitlement import completed'
+    Write-Information 'eCare PUUR permission roles entitlement import completed'
 }
 catch {
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-EcareError -ErrorObject $ex
-        Write-Error "Could not import eCare PUUR permission teams entitlements. Error: $($errorObj.FriendlyMessage)"
+        Write-Error "Could not import eCare PUUR permission roles entitlements. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        Write-Error "Could not import eCare PUUR permission teams entitlements. Error: $($ex.Exception.Message)"
+        Write-Error "Could not import eCare PUUR permission roles entitlements. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
 }

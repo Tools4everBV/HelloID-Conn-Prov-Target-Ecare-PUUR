@@ -7,6 +7,29 @@
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 #region functions
+function Escape-UrlChars {
+    param (
+        [string]$inputString
+    )
+    
+    # Mapping van te vervangen waardes
+    $charMap = @{
+        "&" = "%26"
+        "/" = "%2F"
+        ":" = "%3A"
+        "#" = "%23"
+        "+" = "%2B"
+        " " = "%20"
+    }
+
+    # Gebruik foreach om elk teken in de hash table te vervangen
+    foreach ($key in $charMap.Keys) {
+        $inputString = $inputString -replace [regex]::Escape($key), $charMap[$key]
+    }
+
+    return $inputString
+}
+
 function Get-GenericScimOAuthToken {
 
     [CmdletBinding()]
@@ -175,7 +198,7 @@ try {
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'GrantPermission' {
-                Write-Information "Granting Ecare team permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Granting Ecare team permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
 
                 # Make sure to test with special characters and if needed; add utf8 encoding.
                 $bodyTeams = @{
@@ -190,12 +213,16 @@ try {
                             value = @(@{
                                     type  = 'User'
                                     value = "$($correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber)"
+                                    from = get-date
                                 })
                         }
                     )
                 }
+
+                $EscapedTeam = Escape-UrlChars -inputString $($actionContext.PermissionDisplayName.trim(' '))        
+
                 $splatTeams = @{
-                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.DisplayName)"
+                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$EscapedTeam"
                     Method      = 'Patch'
                     Headers     = $headers
                     Body        = ($bodyTeams | ConvertTo-Json -Depth 4)
@@ -209,7 +236,7 @@ try {
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Grant team permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Grant team permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
             }

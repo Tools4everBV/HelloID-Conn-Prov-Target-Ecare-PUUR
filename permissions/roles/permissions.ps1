@@ -9,14 +9,25 @@ try {
         'Administratie-client',
         'Administratie-medewerker',
         'Clienten',
+        'Clientadministratie Wachtlijst',
+        'Clientadministratie Wachtlijstbeheer',
         'Coach',
         'Coordinator',
         'Declareren',
         'Documentbeheer',
+        'Gedragsdeskundige',
+        'Inzage Clientgegevens',
         'Medewerker',
         'Pleinauteur',
         'Roosteraar',
-        'Superuser'
+        'Serviceteam Applicatiebeheer',
+        'Serviceteam Hrm Mutaties',
+        'Serviceteam Medewerker',
+        'Serviceteam Salarisverwerking',
+        'Wachtlijstrapportages',
+        'Superuser',
+        'Zorgmessenger Regisseur',
+        'Zorgmessenger Serviceteam'
     )
 
     # Make sure to test with special characters and if needed; add utf8 encoding.
@@ -25,7 +36,6 @@ try {
             @{
                 DisplayName    = $permission
                 Identification = @{
-                    DisplayName = $permission
                     Reference   = $permission.ToLower()
                 }
             }

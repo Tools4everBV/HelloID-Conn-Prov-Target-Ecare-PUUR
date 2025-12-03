@@ -141,10 +141,7 @@ try {
         Authorization = "Bearer $accessToken"
     }
 
-    # Get Accounts
-    $importedAccounts = [System.Collections.ArrayList]::new()
-
-    $take = 1000
+    $take = 100
     $skip = 1 # SCIM uses 1-based index
     $moreRecords = $true
 
@@ -157,8 +154,34 @@ try {
     
         $GetResponse = (Invoke-EcareRestMethod @splatGetAccounts)
 
-        foreach ($record in $GetResponse.Resources) {
-            [void]$importedAccounts.Add($record)
+        foreach ($importedAccount in $GetResponse.Resources) {
+            $enabled = $false
+            $importedAccount | Add-Member -MemberType NoteProperty -Name 'displayName' -Value ""
+
+            # Only enable if account is active
+            if ($importedAccount.active -eq $true) {
+                $enabled = $true
+            }
+
+            # Set UserName if missing
+            if ([string]::IsNullOrEmpty($importedAccount.userName)) {
+                $importedAccount.userName = $importedAccount.id
+            }
+
+            # Set DisplayName if missing
+            if ([string]::IsNullOrEmpty($importedAccount.displayName)) {
+                $importedAccount.displayName = $importedAccount.userName
+            }
+
+            # Return the result
+            Write-Output @{
+                AccountReference = $importedAccount.id
+                DisplayName      = $importedAccount.displayName
+                UserName         = $importedAccount.userName
+                Enabled          = $enabled
+                Data             = $importedAccount
+            }
+
         }
 
         if ($GetResponse.totalResults -lt ($skip + $take - 1)) {
@@ -168,34 +191,7 @@ try {
             $skip += $take
         }
     }
-    
-    foreach ($importedAccount in $importedAccounts) {
-        $enabled = $false
 
-        # Only enable if account is active
-        if ($importedAccount.active -eq $true) {
-            $enabled = $true
-        }
-
-        # Set UserName if missing
-        if ([string]::IsNullOrEmpty($importedAccount.userName)) {
-            $importedAccount.userName = $importedAccount.id
-        }
-
-        # Set DisplayName if missing
-        if ([string]::IsNullOrEmpty($importedAccount.displayName)) {
-            $importedAccount.displayName = $importedAccount.userName
-        }
-
-        # Return the result
-        Write-Output @{
-            AccountReference = $importedAccount.id
-            DisplayName      = $importedAccount.displayName
-            UserName         = $importedAccount.userName
-            Enabled          = $enabled
-            Data             = $importedAccount
-        }
-    }
     
     Write-Information 'eCare PUUR account entitlement import completed'
 }
