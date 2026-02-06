@@ -1,12 +1,35 @@
-#################################################################
-# HelloID-Conn-Prov-Target-Ecare-RevokePermission-Group
+################################################################
+# HelloID-Conn-Prov-Target-Ecare-UpdatePermission-Teams
 # PowerShell V2
-#################################################################
+################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 #region functions
+function Escape-UrlChars {
+    param (
+        [string]$inputString
+    )
+    
+    # Mapping van te vervangen waardes
+    $charMap = @{
+        "&" = "%26"
+        "/" = "%2F"
+        ":" = "%3A"
+        "#" = "%23"
+        "+" = "%2B"
+        " " = "%20"
+    }
+
+    # Gebruik foreach om elk teken in de hash table te vervangen
+    foreach ($key in $charMap.Keys) {
+        $inputString = $inputString -replace [regex]::Escape($key), $charMap[$key]
+    }
+
+    return $inputString
+}
+
 function Get-GenericScimOAuthToken {
 
     [CmdletBinding()]
@@ -26,13 +49,13 @@ function Get-GenericScimOAuthToken {
     try {
 
         $headers = @{
-            "content-type" = "application/x-www-form-urlencoded"
+            'content-type' = 'application/x-www-form-urlencoded'
         }
 
         $body = @{
             client_id     = $ClientID
             client_secret = $ClientSecret
-            grant_type    = "client_credentials"
+            grant_type    = 'client_credentials'
             scope         = "Ecare.Service.SCIM"
         }
 
@@ -73,7 +96,6 @@ function Invoke-EcareRestMethod {
         [System.Collections.IDictionary]
         $Headers = @{}
     )
-
     process {
         try {
             $splatParams = @{
@@ -143,18 +165,25 @@ try {
         Authorization = "Bearer $accessToken"
     }
 
-    $splatParams = @{
-        Uri     = "$($ActionContext.Configuration.BaseUrl)/scim/Users/$($ActionContext.References.Account)"
-        Method  = 'Get'
-        Headers = $headers
+    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
+    try {
+        $splatParams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
+            Method  = 'GET'
+            Headers = $headers
+        }
+        $correlatedAccount = Invoke-EcareRestMethod @splatParams
+    } catch {
+        if ($_.Exception.Response.StatusCode -eq 404) {
+            $action = 'NotFound'
+        } else {
+            throw $_
+        }
     }
-    $correlatedAccount = Invoke-EcareRestMethod @splatParams
-    
-    $correlatedAccount = $webResponse
 
     if ($null -ne $correlatedAccount) {
-        $action = 'RevokePermission'
-        $dryRunMessage = "Revoke Ecare permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $action = 'UpdatePermission'
+        $dryRunMessage = "Update Ecare team permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -168,43 +197,56 @@ try {
     # Process
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'RevokePermission' {
-                Write-Information "Revoking Ecare permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
-                $bodyRoles = @{
+            'UpdatePermission' {
+                Write-Information "Updating Ecare team permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+
+                # Make sure to test with special characters and if needed; add utf8 encoding.
+                $bodyTeams = @{
                     Schemas    = @(
                         'urn:ietf:params:scim:api:messages:2.0:PatchOp'
                     )
                     Operations = @(
                         @{
-                            op    = 'Remove'
-                            path  = 'roles'
-                            value = "$($actionContext.References.Permission.Reference)"
+                            name  = 'addMember'
+                            op    = 'add'
+                            path  = 'members'
+                            value = @(@{
+                                    type  = 'User'
+                                    value = "$($correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber)"
+                                    from = get-date
+                                })
                         }
                     )
                 }
-                $splatRoles = @{
-                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($correlatedAccount.id)"
+
+                $EscapedTeam = Escape-UrlChars -inputString $($actionContext.PermissionDisplayName.trim(' '))        
+
+                $splatTeams = @{
+                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$EscapedTeam"
                     Method      = 'Patch'
                     Headers     = $headers
-                    Body        = ($bodyRoles | ConvertTo-Json)
+                    Body        = ($bodyTeams | ConvertTo-Json -Depth 4)
                     ContentType = 'application/json'
                 }
-                $null = Invoke-RestMethod @splatRoles
 
+                $result = Invoke-EcareRestMethod @splatTeams
+                if ($result.results.status -contains 400) {
+                    throw ($result.results.message -join ', ')
+                }
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Revoke permission [$($actionContext.References.Permission.DisplayName)] was successful"
-                    IsError = $false
-                })
+                        Message = "Update team permission [$($actionContext.PermissionDisplayName)] was successful"
+                        IsError = $false
+                    })
             }
 
             'NotFound' {
-                $outputContext.Success  = $true
+                $outputContext.Success = $false
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
-                    IsError = $false
-                })
+                        Message = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                        IsError = $true
+                    })
                 break
             }
         }
@@ -215,14 +257,14 @@ try {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-EcareError -ErrorObject $ex
-        $auditMessage = "Could not revoke Ecare permission. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not update Ecare team permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not revoke Ecare permission. Error: $($_.Exception.Message)"
+        $auditMessage = "Could not update Ecare team permission. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-        Message = $auditMessage
-        IsError = $true
-    })
+            Message = $auditMessage
+            IsError = $true
+        })
 }

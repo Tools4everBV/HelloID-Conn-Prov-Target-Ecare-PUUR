@@ -106,6 +106,12 @@ The following settings are required to connect to the API.
 
 ### Remarks
 
+
+#### Update script for permissions on Teams
+
+The update script for permissions should always be executed for Teams. PUUR sets permissions on the contract level. When a contract changes or is renewed, the permissions expire while HelloID still considers them assigned. This causes missing permissions. The simplest solution is to include the update script to ensure permissions are always verified and remain active on the contracts.
+
+
 #### Employee account required
 
 Note that an employee account is required before a user account can be created. If the employee doesn't exist, a __500 internal server error__ will be returned. The employee account is not managed by _HelloID_. Employee accounts are created by an external synchronization.
