@@ -1,5 +1,7 @@
 
 # HelloID-Conn-Prov-Target-Ecare-PUUR
+> [!WARNING]
+> Team permissions in PUUR are assigned at contract level. When a new contract starts, PUUR removes the team permissions from the previous contract. HelloID does not grant them again because the person still meets the department- or function-based business rule conditions, so no new grant action is triggered. As a result, HelloID may show the entitlements as granted while the team permissions are missing from the active PUUR contract. Make sure the Teams permission update action is always executed to verify and restore these permissions.
 
 > [!IMPORTANT]
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
