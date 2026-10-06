@@ -1,10 +1,11 @@
-############################################################
-# HelloID-Conn-Prov-Target-Ecare-Permissions-Teams
+#################################################
+# HelloID-Conn-Prov-Target-Ecare-importPermission-Roles
 # PowerShell V2
-############################################################
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
 #region functions
 function Get-GenericScimOAuthToken {
 
@@ -131,54 +132,100 @@ function Resolve-EcareError {
     }
 }
 #endregion
-
 try {
-    Write-Information 'Retrieving permissions'
+    Write-Information 'Starting eCare PUUR permission teams entitlement import'
 
+    # Set authentication headers
     $accessToken = Get-GenericScimOAuthToken -ClientID $actionContext.Configuration.ClientId -ClientSecret $actionContext.Configuration.ClientSecret -TokenUrl $actionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
 
-    $startIndex = 1
-    $count = 25
-    $received = 0
+    $staticRoles = @(
+        'Accountbeheer',
+        'Administratie-client',
+        'Administratie-medewerker',
+        'Clienten',
+        'Clientadministratie Wachtlijst',
+        'Clientadministratie Wachtlijstbeheer',
+        'Coach',
+        'Coordinator',
+        'Declareren',
+        'Documentbeheer',
+        'Gedragsdeskundige',
+        'Inzage Clientgegevens',
+        'Medewerker',
+        'Pleinauteur',
+        'Roosteraar',
+        'Serviceteam Applicatiebeheer',
+        'Serviceteam Hrm Mutaties',
+        'Serviceteam Medewerker',
+        'Serviceteam Salarisverwerking',
+        'Wachtlijstrapportages',
+        'Superuser',
+        'Zorgmessenger Regisseur',
+        'Zorgmessenger Serviceteam'
+    )
 
-    do {
-        $splatParams = @{
-            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Groups?startIndex=$startIndex&count=$count"
-            Method  = 'Get'
-            Headers = $headers
+    Write-Information 'Starting getting account memberships of each permission'
+    
+    foreach ($role in $staticRoles) {
+        # Encode role in case it has spaces or special characters
+        $role = $role.ToLower()
+        $encodedRole = [System.Web.HttpUtility]::UrlEncode($role)
+        $groupMembers = @()
+
+        $take = 100
+        $skip = 1 # SCIM uses 1-based index
+        $moreRecords = $true
+
+        while ($moreRecords) {
+            $splatGetGroupMembers = @{
+                Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users?filter=roles%20eq%20%22$encodedRole%22&startIndex=$skip&count=$take"
+                Method  = 'GET'
+                Headers = $headers
+            }
+
+            $GetResponse = Invoke-RestMethod @splatGetGroupMembers
+
+            foreach ($user in $GetResponse.Resources) {
+                $groupMembers += $user.id
+            }
+
+            if ($GetResponse.totalResults -lt ($skip + $take - 1)) {
+                $moreRecords = $false
+            }
+            else {
+                $skip += $take
+            }
         }
 
-        $webResponse = Invoke-EcareRestMethod @splatParams
-
-        foreach ($permission in $webResponse.Resources) {
-            $outputContext.Permissions.Add(
+        if ($groupMembers.Count -gt 0) {
+            Write-Output @(
                 @{
-                    DisplayName    = $permission.displayName
-                    Identification = @{
-                        Reference   = $permission.id
+                    AccountReferences   = $groupMembers
+                    PermissionReference = @{
+                        Id = $role
                     }
+                    Description         = "Rol - $role"
+                    DisplayName         = $role
                 }
             )
         }
-
-        $received = @($webResponse.Resources).Count
-        $startIndex += $received
-
-    } while ($received -eq $count)
-
-    Write-Information 'Permissions retrieved successfully'
+    }
+    
+    Write-Information 'eCare PUUR permission teams entitlement import completed'
 }
 catch {
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-EcareError -ErrorObject $ex
+        Write-Error "Could not import eCare PUUR permission teams entitlements. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
+        Write-Error "Could not import eCare PUUR permission teams entitlements. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
 }

@@ -7,6 +7,29 @@
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 #region functions
+function Escape-UrlChars {
+    param (
+        [string]$inputString
+    )
+    
+    # Mapping van te vervangen waardes
+    $charMap = @{
+        "&" = "%26"
+        "/" = "%2F"
+        ":" = "%3A"
+        "#" = "%23"
+        "+" = "%2B"
+        " " = "%20"
+    }
+
+    # Gebruik foreach om elk teken in de hash table te vervangen
+    foreach ($key in $charMap.Keys) {
+        $inputString = $inputString -replace [regex]::Escape($key), $charMap[$key]
+    }
+
+    return $inputString
+}
+
 function Get-GenericScimOAuthToken {
 
     [CmdletBinding()]
@@ -160,7 +183,7 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'RevokePermission'
-        $dryRunMessage = "Revoke Ecare team permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Revoke Ecare team permission: [$($actionContext.PermissionDisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -175,7 +198,9 @@ try {
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'RevokePermission' {
-                Write-Information "Revoking Ecare team permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Revoking Ecare team permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                
+                # Make sure to test with special characters and if needed; add utf8 encoding.F
                 $bodyTeams = @{
                     Schemas    = @(
                         'urn:ietf:params:scim:api:messages:2.0:PatchOp'
@@ -188,13 +213,16 @@ try {
                             value = @(@{
                                     type  = 'User'
                                     value = "$($correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber)"
+                                    from = get-date
                                 })
                         }
                     )
                 }
 
+                $EscapedTeam = Escape-UrlChars -inputString $($actionContext.PermissionDisplayName.trim(' '))    
+
                 $splatTeams = @{
-                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.DisplayName)"
+                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$EscapedTeam"
                     Method      = 'Patch'
                     Headers     = $headers
                     Body        = ($bodyTeams | ConvertTo-Json -Depth 4)
@@ -205,7 +233,7 @@ try {
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke team permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Revoke team permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
             }

@@ -1,11 +1,13 @@
 
 # HelloID-Conn-Prov-Target-Ecare-PUUR
+> [!WARNING]
+> Team permissions in PUUR are assigned at contract level. When a new contract starts, PUUR removes the team permissions from the previous contract. HelloID does not grant them again because the person still meets the department- or function-based business rule conditions, so no new grant action is triggered. As a result, HelloID may show the entitlements as granted while the team permissions are missing from the active PUUR contract. Make sure the Teams permission update action is always executed to verify and restore these permissions.
 
 > [!IMPORTANT]
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
-  <img src="">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ecare-PUUR/blob/main/Logo.png?raw=true">
 </p>
 
 ## Table of contents
@@ -19,6 +21,7 @@
       - [Correlation configuration](#correlation-configuration)
     - [Connection settings](#connection-settings)
     - [Remarks](#remarks)
+      - [Update script for permissions on Teams](#update-script-for-permissions-on-teams)
       - [Employee account required](#employee-account-required)
       - [Concurrent actions](#concurrent-actions)
       - [Additional mapping](#additional-mapping)
@@ -106,6 +109,12 @@ The following settings are required to connect to the API.
 
 ### Remarks
 
+
+#### Update script for permissions on Teams
+
+The update script for permissions should always be executed for Teams. PUUR sets permissions on the contract level. When a contract changes or is renewed, the permissions expire while HelloID still considers them assigned. This causes missing permissions. The simplest solution is to include the update script to ensure permissions are always verified and remain active on the contracts.
+
+
 #### Employee account required
 
 Note that an employee account is required before a user account can be created. If the employee doesn't exist, a __500 internal server error__ will be returned. The employee account is not managed by _HelloID_. Employee accounts are created by an external synchronization.
@@ -155,9 +164,6 @@ The fields: `userName`, `WorkEmail`, `employeeNumber` and `ExternalId` are requi
 
 > [!TIP]
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
-
-> [!TIP]
->  _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com/forum/helloid-connectors/provisioning/5120-helloid-conn-prov-target-ecare)_.
 
 ## HelloID docs
 
