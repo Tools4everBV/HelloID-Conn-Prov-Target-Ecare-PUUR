@@ -323,7 +323,7 @@ try {
                 $outputContext.data = $actionContext.Data
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Update and disable account was successful, Account property(s) updated: [$($propertiesChanged.name -join ',')]"
+                        Message = "Update and enable account was successful, Account property(s) updated: [$($propertiesChanged.name -join ',')]"
                         IsError = $false
                     })
                 break
