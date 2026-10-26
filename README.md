@@ -1,7 +1,7 @@
 
 # HelloID-Conn-Prov-Target-Ecare-PUUR
 > [!WARNING]
-> Team permissions in PUUR are assigned at contract level. When a new contract starts, PUUR removes the team permissions from the previous contract. HelloID does not grant them again because the person still meets the department- or function-based business rule conditions, so no new grant action is triggered. As a result, HelloID may show the entitlements as granted while the team permissions are missing from the active PUUR contract. Make sure the Teams permission update action is always executed to verify and restore these permissions.
+> Team permissions in PUUR are assigned at contract level. When a new contract starts, PUUR removes the team permissions from the previous contract. HelloID does not grant them again because the person still meets the department- or function-based business rule conditions, so no new grant action is triggered. As a result, HelloID may show the entitlements as granted while the team permissions are missing from the active PUUR contract. Make sure the Teams permission update action is always executed to verify and restore these permissions. Use the _permissions/teams/grantPermission.ps1_ script for the update action, see [Update script for permissions on Teams](#update-script-for-permissions-on-teams).
 
 > [!IMPORTANT]
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
@@ -61,7 +61,7 @@ The following lifecycle actions are available:
 | permissions/roles/grantPermission.ps1  | PowerShell _grant_ lifecycle action. Grants a role to the user      |
 | permissions/roles/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a role from the user |
 | permissions/roles/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available roles |
-| permissions/teams/grantPermission.ps1  | PowerShell _grant_ lifecycle action. Grants a team to the user      |
+| permissions/teams/grantPermission.ps1  | PowerShell _grant_ and _update_ lifecycle action. Grants a team to the user |
 | permissions/teams/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a team from the user |
 | permissions/teams/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available teams |
 | configuration.json                     | Default _configuration.json_                                        |
@@ -113,6 +113,8 @@ The following settings are required to connect to the API.
 #### Update script for permissions on Teams
 
 The update script for permissions should always be executed for Teams. PUUR sets permissions on the contract level. When a contract changes or is renewed, the permissions expire while HelloID still considers them assigned. This causes missing permissions. The simplest solution is to include the update script to ensure permissions are always verified and remain active on the contracts.
+
+There is no separate update script. The grant adds the team membership to the active contract, so configure _permissions/teams/grantPermission.ps1_ as both the **grant** and the **update** script of the Teams permissions.
 
 
 #### Employee account required

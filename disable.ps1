@@ -6,7 +6,7 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-#region functions#region functions
+#region functions
 function Get-GenericScimOAuthToken {
 
     [CmdletBinding()]
@@ -94,39 +94,34 @@ function Invoke-EcareRestMethod {
     }
 }
 function ConvertTo-AccountObject {
+    # Converts the SCIM account object to an object with the field names of the fieldMapping
     param(
         [parameter(Mandatory)]
         [PSCustomObject]
         $AccountModel,
 
         [parameter( Mandatory,
-        ValueFromPipeline = $True)]
+            ValueFromPipeline = $True)]
         [PSCustomObject]
         $SourceObject
     )
     try {
         $modifiedObject = [PSCustomObject]@{}
         foreach ($property in $AccountModel.PSObject.Properties) {
-
-            if($property.Name -eq 'employeeNumber') {
-               $modifiedObject | Add-Member @{ $($property.Name) = $SourceObject.$('urn:ietf:params:scim:schemas:extension:enterprise:2.0:User').$($property.Name) }
+            if ($property.Name -eq 'employeeNumber') {
+                $value = $SourceObject.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber
             }
             elseif ($property.Name -eq 'WorkEmail') {
-
-                foreach ($email in $SourceObject.emails) {
-                    if ($email.type -eq "work") {
-                        $modifiedObject | Add-Member @{ $($property.Name) = $email.value}
-                        break
-                    }
-                }
+                $value = @($SourceObject.emails | Where-Object { $_.type -eq 'work' })[0].value
             }
             else {
-               $modifiedObject | Add-Member @{ $($property.Name) = $SourceObject.$($property.Name) }
+                $value = $SourceObject.$($property.Name)
             }
-
+            $modifiedObject | Add-Member -NotePropertyName $property.Name -NotePropertyValue $value
         }
         Write-Output $modifiedObject
-    } catch {
+    }
+    catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
@@ -168,6 +163,7 @@ function Resolve-EcareError {
 }
 
 function ConvertTo-ScimUpdateObject {
+    # Converts the changed fieldMapping properties to a SCIM PatchOp request
     [CmdletBinding()]
     param (
         [Parameter(
@@ -179,31 +175,58 @@ function ConvertTo-ScimUpdateObject {
 
     [System.Collections.Generic.List[object]]$operations = @()
     foreach ($property in $EcareAccount.PSObject.Properties) {
-        if ($property.Name -eq "WorkEmail") {
-            $operations.Add(
-                [PSCustomObject]@{
-                    op    = "Replace"
-                    path  = "emails"
-                    value = $property.Value
-                }
-            )
-        } else {
-            $operations.Add(
-                [PSCustomObject]@{
-                    op    = "Replace"
-                    path  = $property.Name
-                    value = $property.Value
-                }
-            )
+        switch ($property.Name) {
+            'WorkEmail' {
+                $operations.Add(
+                    [PSCustomObject]@{
+                        op    = 'Replace'
+                        path  = 'emails'
+                        value = @(
+                            [ordered]@{
+                                type    = 'work'
+                                primary = $true
+                                value   = $property.Value
+                            }
+                        )
+                    }
+                )
+            }
+            'employeeNumber' {
+                $operations.Add(
+                    [PSCustomObject]@{
+                        op    = 'Replace'
+                        path  = 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:employeeNumber'
+                        value = $property.Value
+                    }
+                )
+            }
+            'active' {
+                $operations.Add(
+                    [PSCustomObject]@{
+                        op    = 'Replace'
+                        path  = 'active'
+                        value = ("$($property.Value)" -eq 'true')
+                    }
+                )
+            }
+            default {
+                $operations.Add(
+                    [PSCustomObject]@{
+                        op    = 'Replace'
+                        path  = $property.Name
+                        value = $property.Value
+                    }
+                )
+            }
         }
     }
     $body = [ordered]@{
         schemas    = @(
-            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+            'urn:ietf:params:scim:api:messages:2.0:PatchOp'
         )
         Operations = $operations
     }
-    write-output $body
+    Write-Output $body
 }
 #endregion
 
@@ -226,7 +249,6 @@ try {
             Headers = $headers
         }
         $correlatedAccount = Invoke-EcareRestMethod @splatParams
-        $outputContext.PreviousData = $correlatedAccount
     } catch {
         if ($_.Exception.Response.StatusCode -eq 404){
             $action = 'NotFound'
@@ -236,20 +258,19 @@ try {
     }
 
     if ($null -ne $correlatedAccount) {
-		$splatCompareProperties = @{
-            ReferenceObject  = @($correlatedAccount.PSObject.Properties)
-            DifferenceObject = @(([PSCustomObject]$actionContext.Data).PSObject.Properties)
+        # Convert the SCIM account to the field names of the fieldMapping, so it can be compared with the mapped data
+        $currentAccount = $correlatedAccount | ConvertTo-AccountObject -AccountModel ([PSCustomObject]$actionContext.Data)
+        $outputContext.PreviousData = $currentAccount
+
+        # Compare the values as string, because eCare returns booleans while the fieldMapping contains text
+        $propertiesChanged = @(([PSCustomObject]$actionContext.Data).PSObject.Properties | Where-Object { "$($currentAccount.$($_.Name))" -ne "$($_.Value)" })
+        if ($propertiesChanged.Count -gt 0) {
+            $action = 'UpdateDisableAccount'
+            $dryRunMessage = "Update and disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement. Account property(s) required to update: $($propertiesChanged.Name -join ', ')"
+        } else {
+            $action = 'DisableAccount'
+            $dryRunMessage = "Disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
         }
-        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
-        if ($propertiesChanged) {
-			$action = 'UpdateDisableAccount'
-			$dryRunMessage = "Update and disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
-		}
-		else
-		{
-			$action = 'DisableAccount'
-			$dryRunMessage = "Disable Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
-		}
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -258,6 +279,12 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $dryRunMessage"
+        # A disable of an account that is not found is not an error, the same as during enforcement
+        $outputContext.Success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Message = "[DryRun] $dryRunMessage"
+                IsError = $false
+            })
     }
 
     # Process
@@ -299,25 +326,32 @@ try {
                 break
             }
 			
-			'UpdateDisableAccount' {
+            'UpdateDisableAccount' {
                 Write-Information "Updating and disabling Ecare account with accountReference: [$($actionContext.References.Account)]"
 
                 # Make sure to test with special characters and if needed; add utf8 encoding.
                 $ecareUpdateAccount = $actionContext.Data | Select-Object -Property $propertiesChanged.Name
                 $body = $ecareUpdateAccount | ConvertTo-ScimUpdateObject
 
-                Write-Warning ($body | ConvertTo-Json)
+                # Make sure the account is always disabled, also when active is not part of the changed properties
+                if ('active' -notin $propertiesChanged.Name) {
+                    $body.Operations.Add(
+                        [PSCustomObject]@{
+                            op    = 'Replace'
+                            path  = 'active'
+                            value = $false
+                        }
+                    )
+                }
 
                 $splatParams = @{
                     Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users/$($actionContext.References.Account)"
-                    Body    = $body | ConvertTo-Json
+                    Body    = $body | ConvertTo-Json -Depth 10
                     Method  = 'Patch'
                     Headers = $headers
                 }
 
-                Write-Warning "$($splatParams.Uri)"
-
-                $UpdateResult = Invoke-EcareRestMethod @splatParams
+                $null = Invoke-EcareRestMethod @splatParams
 
 
                 $outputContext.data = $actionContext.Data

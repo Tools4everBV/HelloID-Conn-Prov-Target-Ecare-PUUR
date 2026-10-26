@@ -145,7 +145,6 @@ try {
         throw 'The account reference could not be found'
     }
 
-    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
     $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
@@ -178,6 +177,12 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $dryRunMessage"
+        # An account that is not found is not an error, the same as during enforcement
+        $outputContext.Success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Message = "[DryRun] $dryRunMessage"
+                IsError = $false
+            })
     }
 
     # Process
@@ -193,20 +198,18 @@ try {
                     )
                     Operations = @(
                         @{
-                            name  = 'addMember'
                             op    = 'remove'
                             path  = 'members'
                             value = @(@{
                                     type  = 'User'
                                     value = "$($correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber)"
-                                    from = get-date
+                                    from  = (Get-Date).ToString('o') # ISO 8601, the same in Windows PowerShell 5.1 and PowerShell 7
                                 })
                         }
                     )
                 }
 
-                $EscapedTeam = Escape-UrlChars -inputString $($actionContext.PermissionDisplayName.trim(' '))    
-
+                $EscapedTeam = Escape-UrlChars -inputString $actionContext.PermissionDisplayName # Do not trim, the display name must match the team name in eCare (including leading or trailing spaces)
                 $splatTeams = @{
                     Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$EscapedTeam"
                     Method      = 'Patch'

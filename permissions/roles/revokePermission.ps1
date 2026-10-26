@@ -137,7 +137,6 @@ try {
         throw 'The account reference could not be found'
     }
 
-    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
     $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
@@ -162,7 +161,7 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'RevokePermission'
-        $dryRunMessage = "Revoke Ecare permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Revoke Ecare permission: [$($actionContext.PermissionDisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -171,13 +170,19 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $dryRunMessage"
+        # An account that is not found is not an error, the same as during enforcement
+        $outputContext.Success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Message = "[DryRun] $dryRunMessage"
+                IsError = $false
+            })
     }
 
     # Process
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'RevokePermission' {
-                Write-Information "Revoking Ecare permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Revoking Ecare permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
                 $bodyRoles = @{
                     Schemas    = @(
                         'urn:ietf:params:scim:api:messages:2.0:PatchOp'
@@ -197,12 +202,12 @@ try {
                     Body        = ($bodyRoles | ConvertTo-Json)
                     ContentType = 'application/json'
                 }
-                $null = Invoke-RestMethod @splatRoles
+                $null = Invoke-EcareRestMethod @splatRoles
 
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Revoke permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
             }

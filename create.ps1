@@ -93,6 +93,39 @@ function Invoke-EcareRestMethod {
     }
 }
 
+function ConvertTo-AccountObject {
+    # Converts the SCIM account object to an object with the field names of the fieldMapping
+    param(
+        [parameter(Mandatory)]
+        [PSCustomObject]
+        $AccountModel,
+
+        [parameter( Mandatory,
+            ValueFromPipeline = $True)]
+        [PSCustomObject]
+        $SourceObject
+    )
+    try {
+        $modifiedObject = [PSCustomObject]@{}
+        foreach ($property in $AccountModel.PSObject.Properties) {
+            if ($property.Name -eq 'employeeNumber') {
+                $value = $SourceObject.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber
+            }
+            elseif ($property.Name -eq 'WorkEmail') {
+                $value = @($SourceObject.emails | Where-Object { $_.type -eq 'work' })[0].value
+            }
+            else {
+                $value = $SourceObject.$($property.Name)
+            }
+            $modifiedObject | Add-Member -NotePropertyName $property.Name -NotePropertyValue $value
+        }
+        Write-Output $modifiedObject
+    }
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
 function Resolve-EcareError {
     [CmdletBinding()]
     param (
@@ -151,18 +184,32 @@ try {
             throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
         }
 
+        # Translate the account correlation field (field name of the fieldMapping) to the SCIM attribute
+        switch ($correlationField) {
+            'employeeNumber' { $scimAttribute = 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.employeeNumber' }
+            'ExternalId' { $scimAttribute = 'externalId' }
+            'userName' { $scimAttribute = 'userName' }
+            default { throw "Correlation on field [$correlationField] is not supported. Use employeeNumber, ExternalId or userName" }
+        }
+
         # Verify if a user must be either [created ] or just [correlated]
         $splatParams = @{
-            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users?filter=urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.employeeNumber eq $correlationValue"
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Users?filter=$scimAttribute eq $([System.Uri]::EscapeDataString($correlationValue))"
             Method  = 'Get'
             Headers = $headers
         }
         $webResponse = Invoke-EcareRestMethod @splatParams
 
-        if ($webResponse.Resources.count -eq 1) {
-            $correlatedAccount = $webResponse.Resources | Select-Object -First 1
-        } elseif ($webResponse.Resources.count -gt 1) {
-            throw "Multiple accounts are found for [$($actionContext.References.Account)]"
+        if (@($webResponse.Resources).Count -eq 1) {
+            $correlatedAccount = @($webResponse.Resources)[0]
+
+            # Make sure the filter is applied by eCare, so an account is never correlated on a wrong value
+            $correlatedAccountValue = ($correlatedAccount | ConvertTo-AccountObject -AccountModel ([PSCustomObject]@{ $correlationField = $null })).$correlationField
+            if ("$correlatedAccountValue" -ne "$correlationValue") {
+                throw "The account found for $correlationField [$correlationValue] has a different value [$correlatedAccountValue]. The filter is possibly not supported by eCare"
+            }
+        } elseif (@($webResponse.Resources).Count -gt 1) {
+            throw "Multiple accounts are found where $correlationField is: [$correlationValue]"
         }
     }
 
@@ -175,6 +222,16 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $action Ecare account for: [$($personContext.Person.DisplayName)], will be executed during enforcement"
+        if ($action -eq 'CorrelateAccount') {
+            $outputContext.Data = $correlatedAccount | ConvertTo-AccountObject -AccountModel ([PSCustomObject]$actionContext.Data)
+            $outputContext.AccountReference = $correlatedAccount.id
+        }
+        $outputContext.Success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Action  = $action
+                Message = "[DryRun] $action Ecare account for: [$($personContext.Person.DisplayName)], will be executed during enforcement"
+                IsError = $false
+            })
     }
 
     # Process
@@ -206,17 +263,41 @@ try {
                     Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Users"
                     Method      = 'POST'
                     Headers     = $headers
-                    Body        = ($body | ConvertTo-Json)
+                    Body        = ($body | ConvertTo-Json -Depth 10)
                     ContentType = 'application/json'
                 }
 
+                $createError = $null
                 try {
-                    $createdAccount = Invoke-RestMethod @splatCreate
+                    $createdAccount = Invoke-EcareRestMethod @splatCreate
                 } catch {
-                    if ($_.Exception.StatusCode -eq 'NotFound') {
-                        throw "Employee [$($actionContext.Data.employeeNumber)] not found, Employee objects are not managed in this connector"
+                    $createError = $_
+                    $statusCode = [int]$createError.Exception.Response.StatusCode
+                    $errorDetails = if (-not [string]::IsNullOrEmpty($createError.ErrorDetails.Message)) { $createError.ErrorDetails.Message } else { $createError.Exception.Message }
+                }
+
+                # eCare can return an error (or no account) while the account is created, so verify if the account exists after all
+                if (($null -eq $createdAccount.id) -and ($actionContext.CorrelationConfiguration.Enabled)) {
+                    $retryResponse = Invoke-EcareRestMethod @splatParams
+                    $retryAccount = @($retryResponse.Resources | Where-Object {
+                            "$(($_ | ConvertTo-AccountObject -AccountModel ([PSCustomObject]@{ $correlationField = $null })).$correlationField)" -eq "$correlationValue"
+                        })
+                    if ($retryAccount.Count -eq 1) {
+                        Write-Warning "eCare did not return the created account, but the account is found where $correlationField is: [$correlationValue]. Error: $errorDetails"
+                        $createdAccount = $retryAccount[0]
+                    }
+                }
+
+                if ($null -eq $createdAccount.id) {
+                    # eCare returns a 404 or 500 when the employee does not exist, the 500 is also returned for other errors (e.g. a userName that is already in use)
+                    if ($null -eq $createError) {
+                        throw "eCare did not return the created account for employee [$($actionContext.Data.employeeNumber)]"
+                    } elseif ($statusCode -eq 404) {
+                        throw "Employee [$($actionContext.Data.employeeNumber)] not found, Employee objects are not managed in this connector. Error: $errorDetails"
+                    } elseif ($statusCode -eq 500) {
+                        throw "eCare returned an internal server error. Verify that employee [$($actionContext.Data.employeeNumber)] exists (Employee objects are not managed in this connector) and that the userName and email address are not already in use. Error: $errorDetails"
                     } else {
-                        throw
+                        throw $createError
                     }
                 }
 
@@ -241,10 +322,16 @@ try {
                         Body        = ($bodyDisable | ConvertTo-Json)
                         ContentType = "application/json"
                     }
-                    $createdAccount = Invoke-RestMethod @splatDisable
+                    $disabledAccount = Invoke-EcareRestMethod @splatDisable
+
+                    # Only use the response when eCare returns the account, so the account reference is never lost
+                    if ($null -ne $disabledAccount.id) {
+                        $createdAccount = $disabledAccount
+                    }
                 }
 
-                $outputContext.Data = $createdAccount
+                # Convert the SCIM account to the field names of the fieldMapping (arrays and nested objects are not supported in the account data)
+                $outputContext.Data = $createdAccount | ConvertTo-AccountObject -AccountModel ([PSCustomObject]$actionContext.Data)
                 $outputContext.AccountReference = $createdAccount.id
                 $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
                 break
@@ -252,7 +339,8 @@ try {
 
             'CorrelateAccount' {
                 Write-Information 'Correlating Ecare account'
-                $outputContext.Data = $correlatedAccount
+                # Convert the SCIM account to the field names of the fieldMapping (arrays and nested objects are not supported in the account data)
+                $outputContext.Data = $correlatedAccount | ConvertTo-AccountObject -AccountModel ([PSCustomObject]$actionContext.Data)
                 $outputContext.AccountReference = $correlatedAccount.id
                 $outputContext.AccountCorrelated = $true
                 $auditLogMessage = "Correlated account: [$($correlatedAccount.id)] on field: [$($correlationField)] with value: [$($correlationValue)]"
