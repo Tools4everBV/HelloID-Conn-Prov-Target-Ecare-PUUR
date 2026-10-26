@@ -8,9 +8,10 @@ try {
         'Accountbeheer',
         'Administratie-client',
         'Administratie-medewerker',
-        'Clienten',
+        'Client aanmaken',
         'Clientadministratie Wachtlijst',
         'Clientadministratie Wachtlijstbeheer',
+        'Clienten',
         'Coach',
         'Coordinator',
         'Declareren',
@@ -24,8 +25,9 @@ try {
         'Serviceteam Hrm Mutaties',
         'Serviceteam Medewerker',
         'Serviceteam Salarisverwerking',
-        'Wachtlijstrapportages',
         'Superuser',
+        'Wachtlijstrapportages',
+        'Zorgcentrale',
         'Zorgmessenger Regisseur',
         'Zorgmessenger Serviceteam'
     )

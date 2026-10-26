@@ -11,23 +11,9 @@ function Escape-UrlChars {
     param (
         [string]$inputString
     )
-    
-    # Mapping van te vervangen waardes
-    $charMap = @{
-        "&" = "%26"
-        "/" = "%2F"
-        ":" = "%3A"
-        "#" = "%23"
-        "+" = "%2B"
-        " " = "%20"
-    }
 
-    # Gebruik foreach om elk teken in de hash table te vervangen
-    foreach ($key in $charMap.Keys) {
-        $inputString = $inputString -replace [regex]::Escape($key), $charMap[$key]
-    }
-
-    return $inputString
+    # Encode all reserved and special characters (e.g. & / : # + % ? and spaces) so the display name can be used in the URL path
+    return [System.Uri]::EscapeDataString($inputString)
 }
 
 function Get-GenericScimOAuthToken {

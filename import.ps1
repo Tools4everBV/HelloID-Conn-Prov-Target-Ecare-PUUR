@@ -144,6 +144,7 @@ try {
     $take = 100
     $skip = 1 # SCIM uses 1-based index
     $moreRecords = $true
+    $accountCount = 0
 
     while ($moreRecords) {
         $splatGetAccounts = @{
@@ -155,36 +156,52 @@ try {
         $GetResponse = (Invoke-EcareRestMethod @splatGetAccounts)
 
         foreach ($importedAccount in $GetResponse.Resources) {
-            $enabled = $false
-            $importedAccount | Add-Member -MemberType NoteProperty -Name 'displayName' -Value ""
-
-            # Only enable if account is active
-            if ($importedAccount.active -eq $true) {
-                $enabled = $true
+            # Map the SCIM object to the field names of the fieldMapping, HelloID uses these names (e.g. Data.employeeNumber) for correlation
+            $workEmail = @($importedAccount.emails | Where-Object { $_.type -eq 'work' })[0].value
+            if ([string]::IsNullOrEmpty($workEmail)) {
+                $workEmail = @($importedAccount.emails)[0].value
+            }
+            $data = @{
+                id             = $importedAccount.id
+                ExternalId     = $importedAccount.externalId
+                userName       = $importedAccount.userName
+                WorkEmail      = $workEmail
+                active         = $importedAccount.active
+                employeeNumber = $importedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber
             }
 
-            # Set UserName if missing
-            if ([string]::IsNullOrEmpty($importedAccount.userName)) {
-                $importedAccount.userName = $importedAccount.id
+            # Make sure the UserName has a value of max 100 char
+            if (-not([string]::IsNullOrEmpty($importedAccount.userName))) {
+                $userName = $($importedAccount.userName).substring(0, [System.Math]::Min(100, $($importedAccount.userName).Length))
+            }
+            else {
+                $userName = $importedAccount.id
             }
 
-            # Set DisplayName if missing
-            if ([string]::IsNullOrEmpty($importedAccount.displayName)) {
-                $importedAccount.displayName = $importedAccount.userName
+            # Make sure the DisplayName has a value of max 100 char
+            if (-not([string]::IsNullOrEmpty($importedAccount.displayName))) {
+                $displayName = $($importedAccount.displayName).substring(0, [System.Math]::Min(100, $($importedAccount.displayName).Length))
+            }
+            elseif (-not([string]::IsNullOrEmpty($importedAccount.name.formatted))) {
+                $displayName = $($importedAccount.name.formatted).substring(0, [System.Math]::Min(100, $($importedAccount.name.formatted).Length))
+            }
+            else {
+                $displayName = $userName
             }
 
             # Return the result
             Write-Output @{
                 AccountReference = $importedAccount.id
-                DisplayName      = $importedAccount.displayName
-                UserName         = $importedAccount.userName
-                Enabled          = $enabled
-                Data             = $importedAccount
+                DisplayName      = $displayName
+                UserName         = $userName
+                Enabled          = ($importedAccount.active -eq $true)
+                Data             = $data
             }
-
+            $accountCount++
         }
 
-        if ($GetResponse.totalResults -lt ($skip + $take - 1)) {
+        # Stop when the last page is reached, totalResults is not reliable so check the number of returned resources
+        if (@($GetResponse.Resources).Count -lt $take) {
             $moreRecords = $false
         }
         else {
@@ -192,8 +209,7 @@ try {
         }
     }
 
-    
-    Write-Information 'eCare PUUR account entitlement import completed'
+    Write-Information "eCare PUUR account entitlement import completed. Successfully queried [$accountCount] existing accounts"
 }
 catch {
     $ex = $PSItem
