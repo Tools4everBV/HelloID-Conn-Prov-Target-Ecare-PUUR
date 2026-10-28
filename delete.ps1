@@ -168,6 +168,12 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $dryRunMessage"
+        # An account that is not found is not an error, the same as during enforcement
+        $outputContext.Success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Message = "[DryRun] $dryRunMessage"
+                IsError = $false
+            })
     }
 
     # Process
@@ -181,7 +187,7 @@ try {
                     Headers = $headers
                 }
 
-                $null = Invoke-RestMethod @splatDelete
+                $null = Invoke-EcareRestMethod @splatDelete
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{

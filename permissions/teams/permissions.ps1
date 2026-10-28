@@ -45,7 +45,8 @@ function Get-GenericScimOAuthToken {
         $Response = Invoke-RestMethod @splatParams
         Write-Output $Response.access_token
 
-    } catch {
+    }
+    catch {
         $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }
@@ -86,7 +87,8 @@ function Invoke-EcareRestMethod {
                 $splatParams['Body'] = $Body
             }
             Invoke-RestMethod @splatParams -Verbose:$false
-        } catch {
+        }
+        catch {
             $PSCmdlet.ThrowTerminatingError($_)
         }
     }
@@ -107,7 +109,8 @@ function Resolve-EcareError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -120,7 +123,8 @@ function Resolve-EcareError {
             # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
             # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
             $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
         }
         Write-Output $httpErrorObj
@@ -136,31 +140,45 @@ try {
         Authorization = "Bearer $accessToken"
     }
 
-    # Get all groups
-    $splatParams = @{
-        Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Groups"
-        Method  = 'Get'
-        Headers = $headers
-    }
-    $webResponse = Invoke-EcareRestMethod @splatParams
-    foreach ($permission in $webResponse.Resources) {
-        $outputContext.Permissions.Add(
-            @{
-                DisplayName    = $permission.displayName
-                Identification = @{
-                    Reference   = $permission.id
-                    DisplayName = $permission.displayName
+    $startIndex = 1
+    $count = 25
+    $received = 0
+
+    do {
+        $splatParams = @{
+            Uri     = "$($actionContext.Configuration.BaseUrl)/scim/Groups?startIndex=$startIndex&count=$count"
+            Method  = 'Get'
+            Headers = $headers
+        }
+
+        $webResponse = Invoke-EcareRestMethod @splatParams
+
+        foreach ($permission in $webResponse.Resources) {
+            $outputContext.Permissions.Add(
+                @{
+                    DisplayName    = $permission.displayName
+                    Identification = @{
+                        Reference   = $permission.id
+                    }
                 }
-            }
-        )
-    }
-} catch {
+            )
+        }
+
+        $received = @($webResponse.Resources).Count
+        $startIndex += $received
+
+    } while ($received -eq $count)
+
+    Write-Information 'Permissions retrieved successfully'
+}
+catch {
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-EcareError -ErrorObject $ex
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
 }

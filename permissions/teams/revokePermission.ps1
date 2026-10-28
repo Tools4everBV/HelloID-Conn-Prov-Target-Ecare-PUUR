@@ -7,6 +7,15 @@
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 #region functions
+function Escape-UrlChars {
+    param (
+        [string]$inputString
+    )
+
+    # Encode all reserved and special characters (e.g. & / : # + % ? and spaces) so the display name can be used in the URL path
+    return [System.Uri]::EscapeDataString($inputString)
+}
+
 function Get-GenericScimOAuthToken {
 
     [CmdletBinding()]
@@ -136,7 +145,6 @@ try {
         throw 'The account reference could not be found'
     }
 
-    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
     $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
@@ -160,7 +168,7 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'RevokePermission'
-        $dryRunMessage = "Revoke Ecare team permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Revoke Ecare team permission: [$($actionContext.PermissionDisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -169,32 +177,41 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $dryRunMessage"
+        # An account that is not found is not an error, the same as during enforcement
+        $outputContext.Success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Message = "[DryRun] $dryRunMessage"
+                IsError = $false
+            })
     }
 
     # Process
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'RevokePermission' {
-                Write-Information "Revoking Ecare team permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Revoking Ecare team permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                
+                # Make sure to test with special characters and if needed; add utf8 encoding.F
                 $bodyTeams = @{
                     Schemas    = @(
                         'urn:ietf:params:scim:api:messages:2.0:PatchOp'
                     )
                     Operations = @(
                         @{
-                            name  = 'addMember'
                             op    = 'remove'
                             path  = 'members'
                             value = @(@{
                                     type  = 'User'
                                     value = "$($correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.employeeNumber)"
+                                    from  = (Get-Date).ToString('o') # ISO 8601, the same in Windows PowerShell 5.1 and PowerShell 7
                                 })
                         }
                     )
                 }
 
+                $EscapedTeam = Escape-UrlChars -inputString $actionContext.PermissionDisplayName # Do not trim, the display name must match the team name in eCare (including leading or trailing spaces)
                 $splatTeams = @{
-                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$($actionContext.References.Permission.DisplayName)"
+                    Uri         = "$($actionContext.Configuration.BaseUrl)/scim/Groups/$EscapedTeam"
                     Method      = 'Patch'
                     Headers     = $headers
                     Body        = ($bodyTeams | ConvertTo-Json -Depth 4)
@@ -205,7 +222,7 @@ try {
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke team permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Revoke team permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
             }

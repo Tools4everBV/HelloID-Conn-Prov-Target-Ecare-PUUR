@@ -137,7 +137,6 @@ try {
         throw 'The account reference could not be found'
     }
 
-    Write-Information "Verifying if a Ecare account for [$($personContext.Person.DisplayName)] exists"
     $accessToken = Get-GenericScimOAuthToken -ClientID $ActionContext.Configuration.ClientId -ClientSecret $ActionContext.Configuration.ClientSecret -TokenUrl $ActionContext.Configuration.tokenUrl
     $headers = @{
         Authorization = "Bearer $accessToken"
@@ -161,7 +160,7 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'GrantPermission'
-        $dryRunMessage = "Grant Ecare permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Grant Ecare permission: [$($actionContext.PermissionDisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ecare account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -170,13 +169,18 @@ try {
     # Add a message and the result of each of the validations showing what will happen during enforcement
     if ($actionContext.DryRun -eq $true) {
         Write-Information "[DryRun] $dryRunMessage"
+        $outputContext.Success = ($action -ne 'NotFound')
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Message = "[DryRun] $dryRunMessage"
+                IsError = ($action -eq 'NotFound')
+            })
     }
 
     # Process
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'GrantPermission' {
-                Write-Information "Granting Ecare permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Granting Ecare permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
 
                 # Make sure to test with special characters and if needed; add utf8 encoding.
                 $bodyRoles = @{
@@ -198,11 +202,11 @@ try {
                     Body        = ($bodyRoles | ConvertTo-Json)
                     ContentType = 'application/json'
                 }
-                $null = Invoke-RestMethod @splatRoles
+                $null = Invoke-EcareRestMethod @splatRoles
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Grant permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Grant permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
             }
