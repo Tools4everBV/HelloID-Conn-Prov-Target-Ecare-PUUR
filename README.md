@@ -50,7 +50,7 @@ The following features are available:
 | **Resources**                             | ❌         | -                                       |                                                                  |
 | **Entitlement Import: Accounts**          | ✅         | Import accounts                         |                                                                  |
 | **Entitlement Import: Permissions**       | ✅         | Import roles and Teams                  |                                                                  |
-| **Governance Reconciliation Resolutions** | ✅⚠️       | Grant, Revoke                           | Team permissions must be reapplied when a PUUR contract changes. |
+| **Governance Reconciliation Resolutions** | ✅         | Disable, Delete, Revoke                 |                                                                  |
 
 ## Getting started
 
