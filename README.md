@@ -1,10 +1,11 @@
 
 # HelloID-Conn-Prov-Target-Ecare-PUUR
+
 > [!WARNING]
-> Team permissions in PUUR are assigned at contract level. When a new contract starts, PUUR removes the team permissions from the previous contract. HelloID does not grant them again because the person still meets the department- or function-based business rule conditions, so no new grant action is triggered. As a result, HelloID may show the entitlements as granted while the team permissions are missing from the active PUUR contract. Make sure the Teams permission update action is always executed to verify and restore these permissions. Use the _permissions/teams/grantPermission.ps1_ script for the update action, see [Update script for permissions on Teams](#update-script-for-permissions-on-teams).
+> Team permissions in PUUR are assigned at contract level. When a new contract starts, PUUR removes the team permissions from the previous contract. HelloID does not grant them again because the person still meets the department- or function-based business rule conditions, so no new grant action is triggered. As a result, HelloID may show the entitlements as granted while the team permissions are missing from the active PUUR contract. Make sure the Teams permission update action is always executed to verify and restore these permissions. Configure _permissions/teams/grantPermission.ps1_ as the update action.
 
 > [!IMPORTANT]
-> This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
+> This repository contains the connector and configuration code only. The implementer is responsible for acquiring connection details such as username, password, and certificates. A contract or agreement with the supplier may be required. Contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
   <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ecare-PUUR/blob/main/Logo.png?raw=true">
@@ -15,158 +16,130 @@
 - [HelloID-Conn-Prov-Target-Ecare-PUUR](#helloid-conn-prov-target-ecare-puur)
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
+  - [Supported features](#supported-features)
   - [Getting started](#getting-started)
-    - [Provisioning PowerShell V2 connector](#provisioning-powershell-v2-connector)
-      - [Field mapping](#field-mapping)
-      - [Correlation configuration](#correlation-configuration)
+    - [HelloID Icon URL](#helloid-icon-url)
+    - [Requirements](#requirements)
     - [Connection settings](#connection-settings)
-    - [Remarks](#remarks)
-      - [Update script for permissions on Teams](#update-script-for-permissions-on-teams)
-      - [Employee account required](#employee-account-required)
-      - [Concurrent actions](#concurrent-actions)
-      - [Additional mapping](#additional-mapping)
-      - [Correlation by `externalId`](#correlation-by-externalid)
-      - [Limited error handling](#limited-error-handling)
-        - [Error handling function](#error-handling-function)
-      - [Roles can only be revoked](#roles-can-only-be-revoked)
-      - [Static permissions](#static-permissions)
-      - [Email address and userName have some requirements that are unknown.](#email-address-and-username-have-some-requirements-that-are-unknown)
-      - [Unique fields](#unique-fields)
-  - [Setup the connector](#setup-the-connector)
+    - [Correlation configuration](#correlation-configuration)
+    - [Field mapping](#field-mapping)
+    - [Account Reference](#account-reference)
+  - [Remarks](#remarks)
+    - [Team permissions and contract changes](#team-permissions-and-contract-changes)
+    - [Roles](#roles)
+    - [Unique fields and validation](#unique-fields-and-validation)
+    - [Error handling](#error-handling)
+  - [Development resources](#development-resources)
+    - [API endpoints](#api-endpoints)
+    - [API documentation](#api-documentation)
+  - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
 ## Introduction
 
-_HelloID-Conn-Prov-Target-Ecare-PUUR_ is a _target_ connector. _Ecare PUUR_ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
+_HelloID-Conn-Prov-Target-Ecare-PUUR_ is a _target_ connector. _Ecare PUUR_ provides REST APIs that allow you to programmatically interact with its data.
 
-| Endpoint       | Description                      |
-| -------------- | -------------------------------- |
-| /connect/token | Used for generating access token |
-| /scim/v2/Users | Used for all SCIM operations     |
+## Supported features
 
-The API specification can be found on: https://service-scim-o.ecare.nu/swagger
+The following features are available:
 
-> [!NOTE]
-> Note that the endpoints listed in the specification may not be all implemented. The required endpoints for the connector however should be available.
-
-The following lifecycle actions are available:
-
-| Action                                 | Description                                                         |
-| -------------------------------------- | ------------------------------------------------------------------- |
-| create.ps1                             | PowerShell _create_ lifecycle action                                |
-| delete.ps1                             | PowerShell _delete_ lifecycle action                                |
-| disable.ps1                            | PowerShell _disable_ lifecycle action                               |
-| enable.ps1                             | PowerShell _enable_ lifecycle action                                |
-| update.ps1                             | PowerShell _update_ lifecycle action                                |
-| permissions/roles/grantPermission.ps1  | PowerShell _grant_ lifecycle action. Grants a role to the user      |
-| permissions/roles/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a role from the user |
-| permissions/roles/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available roles |
-| permissions/teams/grantPermission.ps1  | PowerShell _grant_ and _update_ lifecycle action. Grants a team to the user |
-| permissions/teams/revokePermission.ps1 | PowerShell _revoke_ lifecycle action.  Revokes a team from the user |
-| permissions/teams/permissions.ps1      | PowerShell _permissions_ lifecycle action. list the available teams |
-| configuration.json                     | Default _configuration.json_                                        |
-| fieldMapping.json                      | Default _fieldMapping.json_                                         |
+| Feature                                   | Supported | Actions                                 | Remarks                                                          |
+| ----------------------------------------- | --------- | --------------------------------------- | ---------------------------------------------------------------- |
+| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete |                                                                  |
+| **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | Roles are static; Teams are retrieved dynamically.               |
+| **Resources**                             | ❌         | -                                       |                                                                  |
+| **Entitlement Import: Accounts**          | ✅         | Import accounts                         |                                                                  |
+| **Entitlement Import: Permissions**       | ✅         | Import roles and Teams                  |                                                                  |
+| **Governance Reconciliation Resolutions** | ✅⚠️       | Grant, Revoke                           | Team permissions must be reapplied when a PUUR contract changes. |
 
 ## Getting started
 
-### Provisioning PowerShell V2 connector
+### HelloID Icon URL
 
-#### Field mapping
+URL of the icon used for the HelloID Provisioning target system:
 
-The field mapping can be imported by using the _fieldMapping.json_ file.
-See the description of each field in this file (or in the HelloID Fields tab after import).
+```text
+https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Ecare-PUUR/refs/heads/main/Icon.png
+```
 
-#### Correlation configuration
+### Requirements
 
-The correlation configuration is used to specify which properties will be used to match an existing account within _Ecare PUUR_ to a person in _HelloID_.
-
-To properly setup the correlation:
-1. Make sure the Field mapping is configured first.
-
-2. Open the `Correlation` tab.
-
-2. Specify the following configuration:
-
-    | Setting                   | Value                                  |
-    | ------------------------- | -------------------------------------- |
-    | Enable correlation        | `True`                                 |
-    | Person correlation field  | ExternalId (field from Fields tab)     |
-    | Account correlation field | employeeNumber (field from Fields tab) |
-
-> [!TIP]
-> _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
+- An employee account must exist in PUUR before HelloID can create a user account. Employee accounts are created by an external synchronization and are not managed by this connector.
+- Set the number of concurrent actions to `1`. The API does not support simultaneous actions on the same user.
 
 ### Connection settings
 
 The following settings are required to connect to the API.
 
-| Setting      | Description                                                                                 | Mandatory |
-| ------------ | ------------------------------------------------------------------------------------------- | --------- |
-| ClientId     | The ClientId to connect to the API                                                          | Yes       |
-| ClientSecret | The ClientSecret to connect to the API                                                      | Yes       |
-| TokenUrl     | The URL to the identity provider that will generate the access token for the API connection | Yes       |
-| BaseUrl      | The URL to SCIM service API root <https://<scim-service-url>>                               | Yes
+| Setting        | Description                                                                      | Mandatory |
+| -------------- | -------------------------------------------------------------------------------- | --------- |
+| `ClientId`     | The client ID used to connect to the API.                                        | Yes       |
+| `ClientSecret` | The client secret used to connect to the API.                                    | Yes       |
+| `TokenUrl`     | The identity provider URL used to generate the access token.                     | Yes       |
+| `BaseUrl`      | The root URL of the SCIM service, for example `https://service-scim-a.ecare.nu`. | Yes       |
 
-### Remarks
+### Correlation configuration
 
+The correlation configuration specifies which properties are used to match an existing Ecare PUUR account to a person in HelloID.
 
-#### Update script for permissions on Teams
-
-The update script for permissions should always be executed for Teams. PUUR sets permissions on the contract level. When a contract changes or is renewed, the permissions expire while HelloID still considers them assigned. This causes missing permissions. The simplest solution is to include the update script to ensure permissions are always verified and remain active on the contracts.
-
-There is no separate update script. The grant adds the team membership to the active contract, so configure _permissions/teams/grantPermission.ps1_ as both the **grant** and the **update** script of the Teams permissions.
-
-
-#### Employee account required
-
-Note that an employee account is required before a user account can be created. If the employee doesn't exist, a __500 internal server error__ will be returned. The employee account is not managed by _HelloID_. Employee accounts are created by an external synchronization.
-
-#### Concurrent actions
-
-Make sure you set the number of concurrent actions (configuration tab) on 1. The external Api does at the moment not support simultaneous actions on the same user.
-
-#### Additional mapping
-
-For some user properties as defined in the Field mapping, there is some additional mapping required and performed in the PowerShell scripts itself to create the actual the SCIM message.
-
-#### Correlation by `externalId`
-
-At the moment, correlation is done by means of the `externalId`. The `id` that will be returned if an account is retrieved or created will be used as the account reference by HelloId.
-
-#### Limited error handling
-
-The API returns limited error information when an error occurs, often resulting in an error 400 or 500 without additional information. For instance; creating an account with a username which already is used, will result in an error 500. A request lacking mandatory properties will result in an error 400.
-
-##### Error handling function
-
-Because error handling is limited within the API, the `Resolve-EcareError` function is still our basic / un-modified implementation.
-
-#### Roles can only be revoked
-
-The permission scripts are used to grant or revoke roles (i.e group memberships) to a user. Roles can only be revoked, when at least once a role has been granted by means of the API for the particular user.
-
-> [!NOTE]
-> Roles that do not exist are ignored.
-
-#### Static permissions
-
-The list of possible roles (groups) is provided by the _permissions.ps1_ script, which currently contains a statically defined list within the script. Any roles not recognized by this list will be ignored by the API when attempting to grant or revoke roles.
-
-#### Email address and userName have some requirements that are unknown.
-
-During testing, we encountered situations where the email address and username provided during the account creation process were not accepted, resulting in a '500 Internal Server Error'. This suggests there may be hidden requirements or constraints that we are unaware of.
-
-#### Unique fields
-
-The fields: `userName`, `WorkEmail`, `employeeNumber` and `ExternalId` are required to be unique.
-
-## Setup the connector
-
-> _How to setup the connector in HelloID._ Are special settings required. Like the _primary manager_ settings for a source connector.
+| Setting                   | Value            |
+| ------------------------- | ---------------- |
+| Enable correlation        | `True`           |
+| Person correlation field  | `ExternalId`     |
+| Account correlation field | `employeeNumber` |
 
 > [!TIP]
-> _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
+> For more information on correlation, refer to the HelloID [correlation documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html).
+
+### Field mapping
+
+Import the field mapping using the _fieldMapping.json_ file. Some user properties are additionally mapped by the PowerShell scripts when creating the SCIM request.
+
+### Account Reference
+
+The account reference is populated from the `id` property returned by Ecare PUUR when an account is retrieved or created.
+
+## Remarks
+
+### Team permissions and contract changes
+
+PUUR assigns team permissions at contract level. When a contract changes or is renewed, permissions may expire even though HelloID still considers them assigned. Configure _permissions/teams/grantPermission.ps1_ as both the grant and update action for Teams permissions so the membership is verified and restored on the active contract.
+
+### Roles
+
+The available roles are defined statically in _permissions/roles/permissions.ps1_. Roles not present in this list are ignored. A role can only be revoked after it has been granted through the API at least once for that user. Roles that do not exist are ignored by the API.
+
+### Unique fields and validation
+
+`userName`, `WorkEmail`, `employeeNumber`, and `ExternalId` must be unique. Email addresses and usernames may also have undocumented requirements; invalid values have resulted in a `500 Internal Server Error` during testing.
+
+### Error handling
+
+The API provides limited error details and may return a `400` or `500` response without a useful explanation. For example, a duplicate username can result in a `500`, while a request missing mandatory properties can result in a `400`. The `Resolve-EcareError` function reports the available response details.
+
+## Development resources
+
+### API endpoints
+
+The connector uses the following endpoints:
+
+| Endpoint            | HTTP methods       | Description                                                                      |
+| ------------------- | ------------------ | -------------------------------------------------------------------------------- |
+| `/connect/token`    | POST               | Generate an OAuth access token.                                                  |
+| `/scim/Users`       | GET, POST          | Retrieve and create user accounts.                                               |
+| `/scim/Users/{id}`  | GET, PATCH, DELETE | Retrieve, update, enable, disable, delete accounts, and update role memberships. |
+| `/scim/Groups`      | GET                | Retrieve Teams for permissions and permission import.                            |
+| `/scim/Groups/{id}` | PATCH              | Grant or revoke a Team membership.                                               |
+
+### API documentation
+
+The Ecare PUUR SCIM API specification is available at [service-scim-o.ecare.nu/swagger](https://service-scim-o.ecare.nu/swagger). Not all endpoints in the specification may be implemented by the service.
+
+## Getting help
+
+> [!TIP]
+> For more information on configuring a HelloID PowerShell connector, refer to the [HelloID PowerShell V2 target system documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html).
 
 ## HelloID docs
 
-The official HelloID documentation can be found at: https://docs.helloid.com/
+The official HelloID documentation can be found at [docs.helloid.com](https://docs.helloid.com/).
